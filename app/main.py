@@ -1,116 +1,146 @@
-from fastapi import FastAPI, Request, BackgroundTasks
-from gtts import gTTS
-import redis
+import speech_recognition as sr
+import asyncio
 import requests
+from gtts import gTTS
+from playsound import playsound
 import os
-import json
 
-app = FastAPI()
+# Initialize Recognizer
+recognizer = sr.Recognizer()
 
-# Initialize Redis for session management
-redis_client = redis.StrictRedis(host="localhost", port=6379, decode_responses=True)
-
-# LLM API Details (e.g., Hugging Face)
+# Hugging Face LLM API Configuration
 LLM_API_URL = "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill"
-LLM_API_KEY = "your_huggingface_api_key"  # Replace with your Hugging Face API key
+LLM_API_KEY = "your_huggingface_api_key" 
 
-# TTS Directory
-TTS_AUDIO_DIR = "audio/"
-os.makedirs(TTS_AUDIO_DIR, exist_ok=True)
+# Directory for Temporary TTS Audio Files
+AUDIO_DIR = "audio/"
+os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# Helper: Send query to LLM API
-def send_to_llm(query: str) -> str:
+# Hotwords List
+HOTWORDS = ["Hey jarvis", "jarvis", "hello jarvis", "yo jarvis"]
+
+# Helper Functions
+async def send_to_llm(query):
     """
-    Sends the user's query to a Large Language Model API.
+    Sends the query to the Hugging Face LLM API and retrieves the response.
     """
     headers = {"Authorization": f"Bearer {LLM_API_KEY}"}
     payload = {"inputs": query}
     try:
-        response = requests.post(LLM_API_URL, headers=headers, json=payload)
+        print("Sending query to LLM...")
+        response = await asyncio.to_thread(requests.post, LLM_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
-        return data.get("generated_text", "Sorry, I couldn't generate a response.")
+        generated_text = data.get("generated_text", "I'm not sure how to respond to that.")
+        print(f"LLM Response: {generated_text}")
+        return generated_text
     except Exception as e:
-        print(f"Error with LLM API: {e}")
-        return "There was an error processing your request."
+        print(f"Error connecting to LLM: {e}")
+        return "Sorry, I couldn't process your request."
 
-# Helper: Generate TTS audio file
-def generate_tts(text: str, session_id: str) -> str:
+async def generate_tts(text, filename):
     """
     Converts text to speech and saves it as an audio file.
     """
-    audio_file = f"{TTS_AUDIO_DIR}{session_id}.mp3"
-    tts = gTTS(text)
-    tts.save(audio_file)
-    # Assuming you use ngrok to serve the files
-    ngrok_url = "https://50ed-92-40-183-65.ngrok-free.app"  # Replace with your actual ngrok public URL
-    return f"{ngrok_url}/{audio_file}"
+    try:
+        print("Generating TTS...")
+        tts = gTTS(text)
+        tts.save(filename)
+        print(f"TTS saved to {filename}")
+        return filename
+    except Exception as e:
+        print(f"Error generating TTS: {e}")
+        return None
 
-@app.post("/alexa/intent")
-async def handle_alexa_request(request: Request, background_tasks: BackgroundTasks):
+async def play_audio(filename):
     """
-    Handles Alexa skill requests.
+    Plays the TTS audio response.
     """
-    # Parse the incoming Alexa request
-    data = await request.json()
-    session_id = data.get("session", {}).get("sessionId")
-    user_query = data.get("request", {}).get("intent", {}).get("slots", {}).get("query", {}).get("value", "")
-    
-    if not session_id or not user_query:
-        return {
-            "version": "1.0",
-            "response": {
-                "outputSpeech": {
-                    "type": "PlainText",
-                    "text": "I didn't understand that. Can you try again?"
-                },
-                "shouldEndSession": False
-            }
-        }
+    try:
+        print("Playing response audio...")
+        playsound(filename)
+    except Exception as e:
+        print(f"Error playing audio: {e}")
 
-    # Retrieve or initialize session data from Redis
-    session_data = redis_client.get(session_id)
-    if not session_data:
-        session_data = {"history": []}
-    else:
-        session_data = json.loads(session_data)
+def detect_hotword(text):
+    """
+    Detects if the input text contains any of the defined hotwords.
+    Returns the detected hotword and the query after it.
+    """
+    for hotword in HOTWORDS:
+        if hotword in text.lower():
+            # Extract query after the hotword
+            query = text.lower().replace(hotword, "").strip()
+            return hotword, query
+    return None, None  # No hotword detected
 
-    # Add the user's query to session history
-    session_data["history"].append(user_query)
+async def listen_and_process():
+    """
+    Continuously listens for audio input, processes the query, and retrieves responses from LLM.
+    """
+    with sr.Microphone() as source:
+        print("Adjusting for ambient noise...")
+        recognizer.adjust_for_ambient_noise(source, duration=2)
+        print(f"Listening for hotwords: {HOTWORDS}...")
 
-    # Save updated session data to Redis
-    redis_client.set(session_id, json.dumps(session_data))
+        while True:
+            try:
+                # Listen for audio
+                print("Waiting for speech...")
+                audio = await asyncio.to_thread(recognizer.listen, source, timeout=5)
+                print("Audio captured, processing...")
 
-    # Generate LLM response in a background task
-    response_text = send_to_llm(user_query)
+                # Process the audio
+                await process_audio(audio)
 
-    # Generate TTS audio in a background task
-    audio_url = generate_tts(response_text, session_id)
+            except sr.WaitTimeoutError:
+                print("No speech detected, continuing...")
+            except Exception as e:
+                print(f"Error while listening: {e}")
 
-    return {
-        "version": "1.0",
-        "response": {
-            "outputSpeech": {
-                "type": "PlainText",
-                "text": response_text
-            },
-            "directives": [
-                {
-                    "type": "AudioPlayer.Play",
-                    "playBehavior": "REPLACE_ALL",
-                    "audioItem": {
-                        "stream": {
-                            "token": "1",
-                            "url": audio_url,
-                            "offsetInMilliseconds": 0
-                        }
-                    }
-                }
-            ],
-            "shouldEndSession": False
-        }
-    }
+async def process_audio(audio):
+    """
+    Transcribes audio to text, detects hotwords, and sends queries to the LLM.
+    """
+    try:
+        # Transcribe audio to text
+        text = await asyncio.to_thread(recognizer.recognize_google, audio)
+        print(f"You said: {text}")
 
-# Serve static audio files (for TTS)
-from fastapi.staticfiles import StaticFiles
-app.mount("/", StaticFiles(directory=TTS_AUDIO_DIR), name="audio")
+        # Detect hotword
+        hotword, query = detect_hotword(text)
+        if hotword:
+            print(f"Hotword '{hotword}' detected! Processing the query...")
+            if query:
+                # Send query to LLM and get response
+                response = await send_to_llm(query)
+                
+                # Generate TTS response
+                audio_filename = os.path.join(AUDIO_DIR, "response.mp3")
+                await generate_tts(response, audio_filename)
+                
+                # Play the response audio
+                await play_audio(audio_filename)
+            else:
+                print("No query detected after hotword.")
+        
+        elif "stop listening" in text.lower():
+            print("Stopping the assistant...")
+            raise KeyboardInterrupt  # Stop the loop gracefully
+
+    except sr.UnknownValueError:
+        print("Sorry, I couldn't understand that.")
+    except sr.RequestError as e:
+        print(f"Could not request results from Google Speech Recognition service; {e}")
+
+async def main():
+    """
+    Main function to run the always-on voice assistant.
+    """
+    try:
+        await listen_and_process()
+    except KeyboardInterrupt:
+        print("\nVoice assistant stopped.")
+
+if __name__ == "__main__":
+    asyncio.run(main())
