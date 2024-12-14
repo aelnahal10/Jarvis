@@ -1,14 +1,29 @@
 from fastapi import APIRouter, Request
+from app.services.query_handler import process_query
 
 router = APIRouter()
 
-@router.post("/alexa")
-async def handle_alexa_request(request: Request):
-    body = await request.json()
-    query = body.get("query", "")
+@router.post("/alexa/intent")
+async def handle_intent(request: Request):
+    data = await request.json()
+    query = data.get("query", "")
     if not query:
-        return {"response": "No query received."}
+        return {
+            "response": {
+                "outputSpeech": {
+                    "type": "PlainText",
+                    "text": "I didn't get that, could you try again?"
+                }
+            }
+        }
 
-    # Process the query (placeholder for real NLU logic)
-    processed_response = f"You asked about {query}. Here's a brief response."
-    return {"response": processed_response}
+    # Send the query to the processor
+    response = await process_query(query)
+    return {
+        "response": {
+            "outputSpeech": {
+                "type": "PlainText",
+                "text": response
+            }
+        }
+    }
