@@ -2,7 +2,20 @@
     "interactionModel": {
         "languageModel": {
             "invocationName": "hello world",
-            "intents": [
+        "intents": [{
+            "name": "QueryIntent",
+            "slots": [
+                    {
+                    "name": "query",
+                    "type": "AMAZON.SearchQuery"
+                    }
+                    ],
+            "samples": [
+                "ask about {query}",
+                "what is {query}",
+                "tell me about {query}"
+            ]
+        },
                 {
                     "name": "AMAZON.CancelIntent",
                     "samples": []
