@@ -9,31 +9,55 @@ from Jarvis.llm import ask_llm
 import datetime
 import speech_recognition as sr
 import pyttsx3
+import json
+from vosk import Model, KaldiRecognizer
 
 # Initialize Speech Recognition and Text-to-Speech Engine
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
 engine.setProperty('rate', 180)
 
+# Load Vosk model for offline wake-word detection
+vosk_model = Model("vosk-model-small-en-us-0.15")  # Ensure this folder exists
+wake_recognizer = KaldiRecognizer(vosk_model, 16000)  # Model listens for wake word
+
 def speak(text):
     """Converts text to speech."""
     engine.say(text)
     engine.runAndWait()
 
-def listen():
-    """Listens for user input via microphone."""
+def wake_word_detection():
+    """Listens passively for the wake word 'Hey Jarvis'."""
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source)
+        speak("Listening for 'Hey Jarvis'...")
+
+        while True:
+            audio = recognizer.listen(source)
+            if wake_recognizer.AcceptWaveform(audio.get_wav_data()):
+                result = json.loads(wake_recognizer.Result())
+                text = result.get("text", "").lower()
+                if "jarvis" in text:  # Wake word detected
+                    speak("Yes? How can I assist?")
+                    return listen_for_command()  # Switch to active command mode
+
+def listen_for_command():
+    """Listens for a user command after activation."""
     with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source)
         speak("Listening...")
+
         try:
-            audio = recognizer.listen(source, timeout=5)
+            audio = recognizer.listen(source, timeout=10)
             command = recognizer.recognize_google(audio).lower()
             print(f"User: {command}")
             return command
         except sr.UnknownValueError:
-            return "I didn't catch that."
+            speak("Sorry, I didn't catch that. Can you repeat?")
+            return ""
         except sr.RequestError:
-            return "Sorry, there was an issue with speech recognition."
+            speak("Speech recognition service is down.")
+            return ""
 
 def process_command(command):
     """Processes and executes user commands."""
@@ -45,8 +69,11 @@ def process_command(command):
 
     elif "weather" in command:
         city = command.split("weather in")[-1].strip()
-        response = fetch_weather(city)
-        speak(response)
+        if city:
+            response = fetch_weather(city)
+            speak(response)
+        else:
+            speak("Please specify a city for the weather update.")
 
     elif "wikipedia" in command or "tell me about" in command:
         topic = command.replace("tell me about", "").strip()
@@ -59,11 +86,11 @@ def process_command(command):
 
     elif "email" in command:
         speak("Who is the recipient?")
-        recipient = listen()
+        recipient = listen_for_command()
         speak("What is the subject?")
-        subject = listen()
+        subject = listen_for_command()
         speak("What is the message?")
-        message = listen()
+        message = listen_for_command()
         result = send_email(recipient, subject, message)
         speak(result)
 
@@ -90,8 +117,8 @@ def process_command(command):
         speak(response)
 
 if __name__ == "__main__":
-    speak("Jarvis AI is online. How can I assist you?")
-    
+    speak("Jarvis AI is online. Say 'Hey Jarvis' to activate.")
     while True:
-        user_command = listen()
-        process_command(user_command)
+        user_command = wake_word_detection()  # Listens for wake word first
+        if user_command:
+            process_command(user_command)  # Process the command

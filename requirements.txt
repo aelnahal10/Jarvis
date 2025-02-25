@@ -1,6 +1,37 @@
-fastapi
-uvicorn
-redis
+# Core dependencies
+PyQt5==5.15.7               # For the GUI
+PyQt5-sip==12.11.0
 
-python-dotenv
-requests
+# Speech recognition and Text-to-Speech
+SpeechRecognition==3.8.1     # For voice input
+pyttsx3==2.90               # For AI voice output
+
+# Web Requests and APIs
+requests==2.31.0            # For LLM & weather API calls
+wikipedia-api==0.5.8        # For Wikipedia search
+beautifulsoup4==4.11.1      # For parsing web results (optional)
+
+# Google APIs
+google-auth==2.22.0
+google-auth-oauthlib==1.0.0
+google-auth-httplib2==0.1.0
+google-api-python-client==2.90.0  # For Google Calendar integration
+
+# System Monitoring
+psutil==5.9.5               # For system stats
+
+# AI Model Handling
+transformers==4.34.0        # For Hugging Face LLM API support (optional)
+torch==2.0.1                # Required for some AI models (optional)
+
+# Web Automation
+pywhatkit==5.4              # For YouTube search
+webbrowser==0.3.4           # For opening websites
+
+# GUI Animation (Optional)
+Pillow==10.0.1              # For handling images/animations in GUI
+
+# Email Handling
+smtplib                     # For sending emails (built-in module)
+
+vosk
