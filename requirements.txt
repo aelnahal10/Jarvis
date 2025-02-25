@@ -22,16 +22,9 @@ psutil==5.9.5               # For system stats
 
 # AI Model Handling
 transformers==4.34.0        # For Hugging Face LLM API support (optional)
-torch==2.0.1                # Required for some AI models (optional)
+torch              # Required for some AI models (optional)
 
 # Web Automation
 pywhatkit==5.4              # For YouTube search
-webbrowser==0.3.4           # For opening websites
-
-# GUI Animation (Optional)
-Pillow==10.0.1              # For handling images/animations in GUI
-
-# Email Handling
-smtplib                     # For sending emails (built-in module)
 
 vosk
