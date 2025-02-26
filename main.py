@@ -10,14 +10,14 @@ import speech_recognition as sr
 import pyttsx3
 import json
 import time
-import threading
 from vosk import Model, KaldiRecognizer
 
 # Initialize Speech Recognition and Text-to-Speech Engine
 recognizer = sr.Recognizer()
+# Initialize Speech Recognition and Text-to-Speech Engine
 engine = pyttsx3.init()
-engine.setProperty('rate', 180)  # Adjust speech rate
-engine.setProperty('volume', 1)  # Set volume to maximum
+engine.setProperty('rate', 200)  # Slightly faster than 180, you can adjust this number
+engine.setProperty('volume', 0.9)
 
 # Load Vosk model for offline wake-word detection
 vosk_model = Model("vosk-model") 
@@ -28,13 +28,10 @@ last_wake_time = None
 WAKE_WORD_INTERVAL = 300  # 5 minutes in seconds
 
 def speak(text):
-    """Non-blocking text-to-speech."""
-    def talk():
-        print(f"Speaking: {text}")  # Debugging line
-        engine.say(text)
-        engine.runAndWait()
-
-    threading.Thread(target=talk).start()  # Run speak in a separate thread
+    """Converts text to speech."""
+    print(f"Speaking: {text}")  # Debugging line
+    engine.say(text)
+    engine.runAndWait()
 
 def take_note():
     """Takes a note and opens it in Notepad++."""
@@ -69,7 +66,7 @@ def listen_for_wake_word():
 
     with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source)
-        print("Listening for wake word...")
+        print("Sleeping...Say Hey Jarvis to wake me up.")
 
         try:
             audio = recognizer.listen(source, timeout=10)
@@ -88,11 +85,10 @@ def listen_for_wake_word():
 def listen_for_command():
     """Listens for a user command after activation."""
     with sr.Microphone() as source:
-        recognizer.adjust_for_ambient_noise(source)
         speak("Listening...")
 
         try:
-            audio = recognizer.listen(source, timeout=10)
+            audio = recognizer.listen(source, timeout=5)  # Reduce timeout time
             command = recognizer.recognize_google(audio).lower()
             print(f"User: {command}")
             return command
