@@ -27,4 +27,8 @@ torch              # Required for some AI models (optional)
 # Web Automation
 pywhatkit==5.4              # For YouTube search
 
+pytz
+
 vosk
+
+sqlalchemy

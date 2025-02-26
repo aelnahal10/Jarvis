@@ -1,6 +1,5 @@
 import os
 import datetime
-
 import subprocess
 from Jarvis.features.calendar import authenticate_google, get_events
 from Jarvis.features.youtube import youtube_search
@@ -18,15 +17,14 @@ engine = pyttsx3.init()
 engine.setProperty('rate', 180)
 
 # Load Vosk model for offline wake-word detection
-vosk_model = Model("/home/monahal10/Jarvis/vosk-model")  # ✅ Correct
+vosk_model = Model("vosk-model") 
 wake_recognizer = KaldiRecognizer(vosk_model, 16000)  # Model listens for wake word
 
 def speak(text):
     """Converts text to speech."""
+    print(f"Speaking: {text}")  # Debugging line
     engine.say(text)
     engine.runAndWait()
-
-
 
 def take_note():
     """Takes a note and opens it in Notepad++."""
@@ -50,6 +48,25 @@ def take_note():
             speak("Notepad++ is not installed, opening with default text editor.")
             os.system(f"notepad {filename}")
 
+def listen_for_wake_word():
+    """Listens for the wake word 'Hey Jarvis'."""
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source)
+        print("Listening for wake word...")
+
+        try:
+            audio = recognizer.listen(source, timeout=10)
+            if wake_recognizer.AcceptWaveform(audio.get_raw_data()):
+                print("Wake word detected!")
+                return True
+            else:
+                return False
+        except sr.UnknownValueError:
+            return False
+        except sr.RequestError:
+            speak("Speech recognition service is down.")
+            return False
+
 def listen_for_command():
     """Listens for a user command after activation."""
     with sr.Microphone() as source:
@@ -70,6 +87,7 @@ def listen_for_command():
 
 def process_command(command):
     """Processes and executes user commands with LLM fallback for general queries."""
+    print(f"Processing command: {command}")  # Debugging line
 
     # 🔹 Hardcoded (direct execution) commands
     if "calendar" in command or "events" in command:
@@ -91,11 +109,9 @@ def process_command(command):
         result = send_email(recipient, subject, message)
         speak(result)
 
-
     elif "system stats" in command or "status" in command:
         response = system_stats()
         speak(response)
-
 
     elif "take a note" in command or "write this down" in command or "remember this" in command:
         take_note()
@@ -104,18 +120,25 @@ def process_command(command):
         response = "I am Jarvis, your AI assistant. I can check the weather, search the web, play music, and assist with various tasks."
         speak(response)
 
-    elif "exit" in command or "goodbye" in command:
-        speak("Shutting down. Goodbye!")
+    elif "You can rest now" in command or "That's it Thanks" in command:
+        speak("Okay sir, Shutting down now. Goodbye!")
         exit()
 
-    # 🔹 Send everything else to the LLM
     else:
         response = ask_llm(command)
         speak(response)
 
+def main_loop():
+    """Main loop that listens for wake word and handles user commands."""
+    while True:
+        if listen_for_wake_word():  # Detect wake word
+            speak("How can I assist you?")
+            user_command = listen_for_command()  # Once the wake word is detected, listen for command
+            if user_command:
+                process_command(user_command)  # Process the command
+            else:
+                speak("Sorry, I didn't catch your command.")
+
 if __name__ == "__main__":
     speak("Jarvis AI is online. Say 'Hey Jarvis' to activate.")
-    while True:
-        user_command = listen_for_command()  # Listens for wake word first
-        if user_command:
-            process_command(user_command)  # Process the command
+    main_loop()
