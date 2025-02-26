@@ -9,22 +9,32 @@ from Jarvis.llm import ask_llm
 import speech_recognition as sr
 import pyttsx3
 import json
+import time
+import threading
 from vosk import Model, KaldiRecognizer
 
 # Initialize Speech Recognition and Text-to-Speech Engine
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
-engine.setProperty('rate', 180)
+engine.setProperty('rate', 180)  # Adjust speech rate
+engine.setProperty('volume', 1)  # Set volume to maximum
 
 # Load Vosk model for offline wake-word detection
 vosk_model = Model("vosk-model") 
 wake_recognizer = KaldiRecognizer(vosk_model, 16000)  # Model listens for wake word
 
+# Variable to store the last time the wake word was detected
+last_wake_time = None
+WAKE_WORD_INTERVAL = 300  # 5 minutes in seconds
+
 def speak(text):
-    """Converts text to speech."""
-    print(f"Speaking: {text}")  # Debugging line
-    engine.say(text)
-    engine.runAndWait()
+    """Non-blocking text-to-speech."""
+    def talk():
+        print(f"Speaking: {text}")  # Debugging line
+        engine.say(text)
+        engine.runAndWait()
+
+    threading.Thread(target=talk).start()  # Run speak in a separate thread
 
 def take_note():
     """Takes a note and opens it in Notepad++."""
@@ -50,6 +60,13 @@ def take_note():
 
 def listen_for_wake_word():
     """Listens for the wake word 'Hey Jarvis'."""
+    global last_wake_time
+    current_time = time.time()
+
+    # Check if it's been more than 5 minutes since the last wake word detection
+    if last_wake_time and current_time - last_wake_time < WAKE_WORD_INTERVAL:
+        return False
+
     with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source)
         print("Listening for wake word...")
@@ -58,6 +75,7 @@ def listen_for_wake_word():
             audio = recognizer.listen(source, timeout=10)
             if wake_recognizer.AcceptWaveform(audio.get_raw_data()):
                 print("Wake word detected!")
+                last_wake_time = current_time  # Update the last wake word detection time
                 return True
             else:
                 return False
@@ -131,13 +149,16 @@ def process_command(command):
 def main_loop():
     """Main loop that listens for wake word and handles user commands."""
     while True:
-        if listen_for_wake_word():  # Detect wake word
+        if listen_for_wake_word():  # Detect wake word (only after 5 minutes)
             speak("How can I assist you?")
             user_command = listen_for_command()  # Once the wake word is detected, listen for command
             if user_command:
                 process_command(user_command)  # Process the command
             else:
                 speak("Sorry, I didn't catch your command.")
+
+            # After processing the command, continue to check for the wake word only after 5 minutes
+            speak("Listening for wake word...")  # Ready to listen again after completing the task.
 
 if __name__ == "__main__":
     speak("Jarvis AI is online. Say 'Hey Jarvis' to activate.")
